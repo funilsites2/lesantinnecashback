@@ -25,9 +25,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (usr) => {
       if (usr) {
         const isPasswordUser = usr.providerData.some(p => p.providerId === 'password');
-        const isGoogleAllowed = usr.email === "funilsites@gmail.com";
+        const allowedEmails = ["funilsites@gmail.com", "estudiokasar@gmail.com"];
+        const allowedUids = ["pZ14BRaUndVhBGUH3iTXZMBLHm", "pZ14BRaUndVhBGUH3iTXZMBLHmS2", "bDFXkFV9YKPmVrroTqBJVvnhnNy1"];
         
-        if (!isPasswordUser && !isGoogleAllowed) {
+        const isAdmin = isPasswordUser || (usr.email && allowedEmails.includes(usr.email)) || allowedUids.includes(usr.uid);
+        
+        if (!isAdmin) {
           await auth.signOut();
           setUser(null);
           return;
@@ -59,14 +62,24 @@ function Login() {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
-      if (result.user.email !== "funilsites@gmail.com") {
+      const allowedEmails = ["funilsites@gmail.com", "estudiokasar@gmail.com"];
+      const allowedUids = ["pZ14BRaUndVhBGUH3iTXZMBLHm", "pZ14BRaUndVhBGUH3iTXZMBLHmS2", "bDFXkFV9YKPmVrroTqBJVvnhnNy1"];
+      const isAllowed = (result.user.email && allowedEmails.includes(result.user.email)) || allowedUids.includes(result.user.uid);
+      
+      if (!isAllowed) {
         await auth.signOut();
-        toast.error("Acesso negado", { description: "Somente o administrador listado pode acessar via Google." });
+        toast.error("Acesso negado", { description: "Somente o administrador listado pode acessar." });
         return;
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login failed", error);
-      toast.error("Erro no login", { description: "Não foi possível realizar o login com o Google. Se estiver em um novo domínio, adicione-o ao Firebase Auth." });
+      if (error.code === 'auth/operation-not-allowed') {
+        toast.error("Google Login Desativado", { description: "Você precisa ativar o provedor 'Google' no menu Authentication do Firebase." });
+      } else if (error.code === 'auth/unauthorized-domain') {
+        toast.error("Domínio não autorizado", { description: "Adicione 'lesantinnecashback.vercel.app' nos domínios autorizados do Firebase Auth." });
+      } else {
+        toast.error("Erro no login", { description: `Erro: ${error.message}` });
+      }
     }
   };
 
@@ -76,9 +89,17 @@ function Login() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       // Auth provider listener will set the user
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login com email falhou", error);
-      toast.error("Erro no login", { description: "Credenciais inválidas. Verifique seu e-mail e senha." });
+      if (error.code === 'auth/operation-not-allowed') {
+        toast.error("E-mail/Senha Desativado", { description: "Ative o provedor 'E-mail/Senha' no Firebase Console -> Authentication." });
+      } else if (error.code === 'auth/invalid-credential') {
+         toast.error("Credenciais inválidas", { description: "A senha ou o e-mail não conferem." });
+      } else if (error.code === 'auth/user-not-found') {
+        toast.error("Usuário não encontrado", { description: "Este e-mail não está cadastrado no Firebase." });
+      } else {
+        toast.error("Erro no login", { description: `Erro: ${error.message}` });
+      }
     } finally {
       setIsLoggingIn(false);
     }
