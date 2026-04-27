@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation, useNavigate } from "react-router-dom";
-import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "./firebase";
 import { Copy, CreditCard, LayoutDashboard, Settings, Users, LogOut, Gift, Bell } from "lucide-react";
 
@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -21,11 +23,18 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (usr) => {
-      if (usr && usr.email !== "funilsites@gmail.com") {
-        await auth.signOut();
-        setUser(null);
-      } else {
+      if (usr) {
+        const isPasswordUser = usr.providerData.some(p => p.providerId === 'password');
+        const isGoogleAllowed = usr.email === "funilsites@gmail.com";
+        
+        if (!isPasswordUser && !isGoogleAllowed) {
+          await auth.signOut();
+          setUser(null);
+          return;
+        }
         setUser(usr);
+      } else {
+        setUser(null);
       }
       setLoading(false);
     });
@@ -42,18 +51,36 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 function Login() {
-  const handleLogin = async () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
       if (result.user.email !== "funilsites@gmail.com") {
         await auth.signOut();
-        toast.error("Acesso negado", { description: "Somente o administrador pode acessar este sistema." });
+        toast.error("Acesso negado", { description: "Somente o administrador listado pode acessar via Google." });
         return;
       }
     } catch (error) {
       console.error("Login failed", error);
-      toast.error("Erro no login", { description: "Não foi possível realizar o login." });
+      toast.error("Erro no login", { description: "Não foi possível realizar o login com o Google. Se estiver em um novo domínio, adicione-o ao Firebase Auth." });
+    }
+  };
+
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // Auth provider listener will set the user
+    } catch (error) {
+      console.error("Login com email falhou", error);
+      toast.error("Erro no login", { description: "Credenciais inválidas. Verifique seu e-mail e senha." });
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -64,11 +91,51 @@ function Login() {
           <Gift className="w-8 h-8 text-primary-foreground" />
         </div>
         <h1 className="text-3xl font-bold text-neutral-900">Programa de Fidelidade</h1>
-        <p className="text-neutral-500 mt-2">Sistema de Pontos e Cashback</p>
+        <p className="text-neutral-500 mt-2">Acesso ao Administrador</p>
       </div>
-      <Button onClick={handleLogin} size="lg" className="w-full max-w-sm">
-        Entrar com Google
-      </Button>
+      
+      <div className="w-full max-w-sm bg-white p-8 rounded-xl shadow-md border border-neutral-100">
+        <form onSubmit={handleEmailLogin} className="space-y-4 mb-6">
+          <div className="space-y-2 text-left">
+            <Label htmlFor="email">E-mail Administrativo</Label>
+            <Input 
+              id="email" 
+              type="email" 
+              placeholder="admin@exemplo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2 text-left">
+            <Label htmlFor="password">Senha</Label>
+            <Input 
+              id="password" 
+              type="password"
+              placeholder="Sua senha"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+          <Button type="submit" size="lg" className="w-full" disabled={isLoggingIn}>
+            {isLoggingIn ? "Entrando..." : "Entrar com Email"}
+          </Button>
+        </form>
+
+        <div className="relative mb-6">
+          <div className="absolute inset-0 flex items-center">
+            <span className="w-full border-t border-neutral-200" />
+          </div>
+          <div className="relative flex justify-center text-xs uppercase">
+            <span className="bg-neutral-50 px-2 text-neutral-500">ou</span>
+          </div>
+        </div>
+
+        <Button onClick={handleGoogleLogin} variant="outline" size="lg" className="w-full">
+          Entrar com Google
+        </Button>
+      </div>
     </div>
   );
 }
